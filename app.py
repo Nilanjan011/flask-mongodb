@@ -8,6 +8,7 @@ import jwt
 import datetime
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
 
 app = Flask(__name__)
 
@@ -146,19 +147,35 @@ def login():
     return jsonify({'error': 'Invalid email or password'}), 401
 
 
+# middleware
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization')
+
+        if not token:
+            return jsonify({"message": "Token is missing"}), 401
+
+        try:
+            decoded = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            request.user_id = decoded['user_id']  # attach to request context
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Token has expired"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Invalid token"}), 401
+
+        return f(*args, **kwargs)
+
+    return decorated
+
 # Protected Route
 @app.route('/profile', methods=['GET'])
+@token_required
 def profile():
-    token = request.headers.get('Authorization')
-    
-    if not token:
-        return jsonify({"message": "Missing token"}), 401
+    print(request.user_id)
 
     try:
-        decoded = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-        print(decoded)
-        
-        user = db['users'].find_one({"_id": ObjectId(decoded["user_id"])})
+        user = db['users'].find_one({"_id": ObjectId(request.user_id)})
         if not user:
             return jsonify({"message": "User not found"}), 404
 
@@ -172,6 +189,92 @@ def profile():
     except jwt.InvalidTokenError:
         return jsonify({"message": "Invalid token"}), 401
 
+
+@app.route('/post')
+def createPost():
+    # users = db["users"].find({})
+    # for user in users:
+    #     print(user)
+    #     db.posts.insert_one({
+    #         "user_id": ObjectId(user['_id']),
+    #         "title": user['name'] + "title",
+    #         "desc": user['name'] + "desc"
+    #     })
+
+    # return ''
+
+    # join users and posts
+    # u = db.users.find({
+    #     "$or": [
+    #         { "is_active": "1" },
+    #         { "is_delete": "0" }
+    #     ]
+    # })
+    # return dumps(u)
+    # users = db.users.aggregate([
+    #     {
+    #         "$match": {
+    #             "$or": [
+    #                 { "is_active": "1" },
+    #                 { "is_delete": "0" }
+    #             ]
+    #         }
+    #     },
+    #     {
+    #         "$lookup": {
+    #             "from": "posts",
+    #             "localField": "_id",
+    #             "foreignField": "user_id",
+    #             "as": "post"
+    #         }
+    #     },
+    #     {
+    #         "$unwind": {
+    #             "path":"$post",
+    #             "preserveNullAndEmptyArrays":True # 👈 keeps users even if they have no posts
+    #         }
+    #     },
+    #     {
+    #         "$match": {
+    #             "post.is_active": "1"  # only active posts
+    #         }
+    #     }
+    # ])
+
+
+    ## post come should be array under of user and all users data come but only matching post will come
+    users = db.users.aggregate([
+    {
+        "$match": {
+            "$or": [
+                { "is_active": "1" },
+                { "is_delete": "0" }
+            ]
+        }
+    },
+    {
+        "$lookup": {
+            "from": "posts",
+            "let": { "userId": "$_id" },
+            "pipeline": [
+                {
+                    "$match": {
+                        "$expr": {
+                            "$and": [
+                                { "$eq": ["$user_id", "$$userId"] },
+                                { "$eq": ["$is_active", "1"] }
+                            ]
+                        }
+                    }
+                }
+            ],
+            "as": "post"
+        }
+    }
+])
+
+
+    return dumps(users)
 
 if __name__ == '__main__':
     app.run(debug=True)
