@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, render_template
 from pymongo import MongoClient
 from bson.json_util import dumps
 from bson import ObjectId
@@ -9,7 +9,7 @@ import datetime
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
-
+from flask_mail import Mail, Message
 app = Flask(__name__)
 
 # Config
@@ -30,6 +30,16 @@ client = MongoClient("mongodb+srv://nilanjanchakraborty:WvlqTsVdUapYeSQu@cluster
 db = client["test"]
 
 
+# Configure Flask-Mail (example: Gmail SMTP)
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'nilanjan.chakraborty@codeclouds.in'
+app.config['MAIL_PASSWORD'] = 'ykmzonytmyhxoyyg'
+app.config['MAIL_DEFAULT_SENDER'] = 'no-reply@gmail.com'
+
+mail = Mail(app)
+
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -38,10 +48,16 @@ def allowed_file(filename):
 def file_too_large(e):
     return jsonify({"error": f"File is too large. Max size is {MAX_FILE_SIZE_MB}MB."}), 413
 
+@app.context_processor
+def inject_navbar():
+    navbar_items = ['Home', 'Products', 'Services', 'Contact']
+    return dict(navbar_items=navbar_items)
+
 
 @app.route('/')
 def home():
-    return 'Hello, Flask!'
+    users = list(db["users"].find({}, {'_id': 0}))  # Exclude _id if not needed
+    return render_template('page/index.html', users=users)
 
 @app.route('/users')
 def get_users():
@@ -191,7 +207,7 @@ def profile():
 
 
 @app.route('/post')
-def createPost():
+def post():
     # users = db["users"].find({})
     # for user in users:
     #     print(user)
@@ -243,38 +259,85 @@ def createPost():
 
 
     ## post come should be array under of user and all users data come but only matching post will come
-    users = db.users.aggregate([
-    {
-        "$match": {
-            "$or": [
-                { "is_active": "1" },
-                { "is_delete": "0" }
-            ]
-        }
-    },
-    {
-        "$lookup": {
-            "from": "posts",
-            "let": { "userId": "$_id" },
-            "pipeline": [
-                {
-                    "$match": {
-                        "$expr": {
-                            "$and": [
-                                { "$eq": ["$user_id", "$$userId"] },
-                                { "$eq": ["$is_active", "1"] }
-                            ]
-                        }
-                    }
-                }
-            ],
-            "as": "post"
-        }
-    }
-])
+#     users = db.users.aggregate([
+#     {
+#         "$match": {
+#             "$or": [
+#                 { "is_active": "1" },
+#                 { "is_delete": "0" }
+#             ]
+#         }
+#     },
+#     {
+#         "$lookup": {
+#             "from": "posts",
+#             "let": { "userId": "$_id" },
+#             "pipeline": [
+#                 {
+#                     "$match": {
+#                         "$expr": {
+#                             "$and": [
+#                                 { "$eq": ["$user_id", "$$userId"] },
+#                                 { "$eq": ["$is_active", "1"] }
+#                             ]
+#                         }
+#                     }
+#                 }
+#             ],
+#             "as": "post"
+#         }
+#     }
+# ])
 
+    users = db.users.aggregate([
+        {
+            "$lookup": {
+                "from": "user_images",
+                "localField": "_id",
+                "foreignField": "user_id",
+                "as": "images"
+            }
+        },
+        {
+            "$addFields": {
+                "image_count": { "$size": "$images" }
+            }
+        },
+        {
+            "$sort":{
+                "image_count":-1
+            }
+        },
+        {
+            "$project": {
+                "name": 1,
+                "email": 1,
+                "image_count": 1
+            }
+        }
+    ])
 
     return dumps(users)
+
+@app.route('/send-welcome-mail')
+def send_welcome_mail():
+    recipient = "nilanjan.chakraborty@codeclouds.in"
+    name = "Nilanjan Chakraborty"
+    # return render_template('email/welcome.html', name=name)
+
+    msg = Message(
+        subject='Welcome to Flask App!',
+        recipients=[recipient],
+        html = render_template('email/welcome.html', name=name)
+    )
+
+    try:
+        mail.send(msg)
+        return jsonify({'message': 'Welcome email sent successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+
 
 if __name__ == '__main__':
     app.run(debug=True)

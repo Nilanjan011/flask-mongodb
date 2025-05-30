@@ -1,0 +1,5 @@
+<ul>
+    {% for item in navbar_items %}
+        <li><a href="{{url_for('home')}}">{{ item }}</a></li>
+    {% endfor %}
+</ul>
