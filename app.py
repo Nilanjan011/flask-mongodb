@@ -10,6 +10,8 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from flask_mail import Mail, Message
+from config.redisCache import r
+
 app = Flask(__name__)
 
 # Config
@@ -22,8 +24,6 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE_MB * 1024 * 1024  # Flask auto-
 app.config['SECRET_KEY'] = 'your_secret_key_here'  # Change to a strong key
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-
 
 client = MongoClient("mongodb+srv://nilanjanchakraborty:WvlqTsVdUapYeSQu@cluster0.fjwixiy.mongodb.net?retryWrites=true&w=majority&appName=Cluster0")
 
@@ -337,7 +337,34 @@ def send_welcome_mail():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
+@app.route('/set')
+def set_key():
+    key = 'key:1'
+    # value = 'value'
+    # r.set(key, value, ex=5)  # Key expires after 10 seconds
 
+    res1 = r.hset(
+        key,
+        mapping={
+            "model": "Deimos",
+            "brand": "Ergonom",
+            "type": "Enduro bikes",
+            "price": 4972,
+        }
+    )
+    r.expire(key, 5)
+    
+    return jsonify({"message":"expires in 5 seconds"})
+
+
+@app.route('/get')
+def get_key():
+    # value = r.get('keyi:1')
+    value = r.hgetall('key:1')
+    print(value)
+    if value:
+        return jsonify({'value': value})
+    return jsonify({"error": "Key not found"}), 404
 
 if __name__ == '__main__':
     app.run(debug=True)
