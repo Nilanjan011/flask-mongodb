@@ -3,6 +3,7 @@
 <head>
     <title>{% block title %}My Site{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block style %}{% endblock %}
 </head>
 <body>
     <section>
