@@ -11,6 +11,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from flask_mail import Mail, Message
 from config.redisCache import r
+from middleware.auth import token_required
 
 app = Flask(__name__)
 
@@ -162,27 +163,6 @@ def login():
         return jsonify({'message': 'Login successful', "token": token}), 200
     return jsonify({'error': 'Invalid email or password'}), 401
 
-
-# middleware
-def token_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = request.headers.get('Authorization')
-
-        if not token:
-            return jsonify({"message": "Token is missing"}), 401
-
-        try:
-            decoded = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
-            request.user_id = decoded['user_id']  # attach to request context
-        except jwt.ExpiredSignatureError:
-            return jsonify({"message": "Token has expired"}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({"message": "Invalid token"}), 401
-
-        return f(*args, **kwargs)
-
-    return decorated
 
 # Protected Route
 @app.route('/profile', methods=['GET'])
