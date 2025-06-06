@@ -346,5 +346,14 @@ def get_key():
         return jsonify({'value': value})
     return jsonify({"error": "Key not found"}), 404
 
+
+@app.route('/publish/<user_id>', methods=['get'])
+def publish(user_id):
+    message = 'This is Publish message:  '+user_id
+    channel = "channel_1"
+
+    r.publish(channel, message)
+    return jsonify({"status": "Message published", "channel": channel}), 200
+
 if __name__ == '__main__':
     app.run(debug=True)
