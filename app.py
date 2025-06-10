@@ -12,6 +12,7 @@ from functools import wraps
 from flask_mail import Mail, Message
 from config.redisCache import r
 from middleware.auth import token_required
+from kafkaConfig.producer import produceMesg
 
 app = Flask(__name__)
 
@@ -354,6 +355,14 @@ def publish(user_id):
 
     r.publish(channel, message)
     return jsonify({"status": "Message published", "channel": channel}), 200
+
+
+@app.route('/send-msg')
+def sendMsg():
+    obj = {'id': 1, 'message': 'Hello Kafka!'}
+    produceMesg(obj)
+
+    return jsonify({"status": 1, "message": "send message successfully"})
 
 if __name__ == '__main__':
     app.run(debug=True)
